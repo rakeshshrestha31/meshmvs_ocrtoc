@@ -285,12 +285,13 @@ def evaluate_split(
             for k, v in cur_metrics.items():
                 metrics[k].append(v)
 
-        voxel_losses = MeshLoss.voxel_loss(
-            voxel_scores, merged_voxel_scores, batch["voxels"]
-        )
-        # to get metric negate loss
-        for k, v in voxel_losses.items():
-            metrics[k].append(-v.item())
+        if "voxels" in batch:
+            voxel_losses = MeshLoss.voxel_loss(
+                voxel_scores, merged_voxel_scores, batch["voxels"]
+            )
+            # to get metric negate loss
+            for k, v in voxel_losses.items():
+                metrics[k].append(-v.item())
 
         # Store input images and predicted meshes
         if store_predictions:
@@ -377,12 +378,13 @@ def evaluate_vox(model, loader, prediction_dir=None, max_predictions=-1):
             for k, v in cur_metrics.items():
                 metrics["final_" + k].append(v)
 
-        voxel_losses = MeshLoss.voxel_loss(
-            voxel_scores, merged_voxel_scores, batch["voxels"]
-        )
-        # to get metric negate loss
-        for k, v in voxel_losses.items():
-            metrics[k].append(-v.detach().item())
+        if "voxels" in batch:
+            voxel_losses = MeshLoss.voxel_loss(
+                voxel_scores, merged_voxel_scores, batch["voxels"]
+            )
+            # to get metric negate loss
+            for k, v in voxel_losses.items():
+                metrics[k].append(-v.detach().item())
 
         # save meshes
         if prediction_dir is not None:

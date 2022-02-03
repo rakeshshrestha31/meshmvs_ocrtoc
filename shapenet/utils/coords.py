@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from pytorch3d.structures import Meshes
 from pytorch3d.utils import ico_sphere
 
-SHAPENET_MIN_ZMIN = 0.67
+SHAPENET_MIN_ZMIN = 0.05 # 0.475 # 0.67
 SHAPENET_MAX_ZMAX = 0.92
 
 SHAPENET_AVG_ZMIN = 0.77

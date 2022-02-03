@@ -1108,7 +1108,7 @@ class MeshDepthHead(VoxMeshDepthHead):
         self.init_mvsnet(cfg)
         if not cfg.MODEL.VOXEL_REFINE_HEAD.VOXEL_ONLY:
             self.init_mesh_head(cfg)
-        self.voxel_refine_head = VoxelRefineHead(cfg)
+        # self.voxel_refine_head = VoxelRefineHead(cfg)
         self.noise_filter_size = cfg.MODEL.VOXEL_HEAD.NOISE_FILTER_SIZE
         self.noise_filter_padding = (self.noise_filter_size -1) // 2
         self.noise_filter_threshold = cfg.MODEL.VOXEL_HEAD.NOISE_FILTER_THRESHOLD
@@ -1264,7 +1264,8 @@ class MeshDepthHead(VoxMeshDepthHead):
         # save_depths(masked_depths, "{}_masked_depth".format(timestamp))
         # exit(0)
 
-        vox_scores = self.voxel_refine_head(vox_scores.unsqueeze(1)).squeeze(1)
+        # TODO: enable voxel refining
+        # vox_scores = self.voxel_refine_head(vox_scores.unsqueeze(1)).squeeze(1)
         cubified_meshes = cubify(
             vox_scores,
             self.voxel_size, self.cubify_threshold
