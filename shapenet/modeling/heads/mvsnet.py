@@ -16,10 +16,22 @@ T_shapenet_dtu = np.asarray([
 ])
 
 
+def transform_inverse(T):
+    R = T[:, :3, :3]
+    t = T[:, :3, -1].unsqueeze(-1)
+    T_inv = torch.zeros_like(T)
+    T_inv[:, :3, :3] = R.permute(0, 2, 1)
+    T_inv[:, :3, -1] = -torch.bmm(R.permute(0, 2, 1), t).squeeze(-1)
+    T_inv[:, -1, -1] = 1
+    return T_inv
+
+
 def project_pixel_coords(x, y, depth_values, src_proj, ref_proj, batch):
     """project pixel coords (x, y) to another image frame for each possible depth_values"""
     num_depth = depth_values.shape[1]
-    transform = torch.matmul(src_proj[:, 0], torch.inverse(ref_proj[:, 0]))
+    src_T = src_proj[:, 0, ...]
+    ref_T_inv = transform_inverse(ref_proj[:, 0, ...])
+    transform = torch.bmm(src_T, ref_T_inv)
 
     device = x.get_device()
     # transform the extrinsics from shapenet frame to DTU
