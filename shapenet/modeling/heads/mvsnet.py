@@ -40,11 +40,11 @@ def project_pixel_coords(x, y, depth_values, src_proj, ref_proj, batch):
         transform_shapenet_dtu = transform_shapenet_dtu.cuda(device)
 
     src_transform = torch.matmul(
-        torch.inverse(transform_shapenet_dtu),
+        transform_inverse(transform_shapenet_dtu),
         torch.matmul(src_proj[:, 0], transform_shapenet_dtu)
     )
     ref_transform = torch.matmul(
-        torch.inverse(transform_shapenet_dtu),
+        transform_inverse(transform_shapenet_dtu),
         torch.matmul(ref_proj[:, 0], transform_shapenet_dtu)
     )
 
