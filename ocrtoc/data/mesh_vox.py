@@ -3,7 +3,9 @@ import json
 import logging
 import os
 import pickle
+import tempfile
 import numpy as np
+import open3d as o3d
 import torch
 from pytorch3d.ops import sample_points_from_meshes
 from pytorch3d.structures import Meshes
@@ -170,8 +172,13 @@ class MeshVoxDataset(Dataset):
 
     @staticmethod
     def read_mesh(data_dir, scene_name, RT):
-        mesh_path = os.path.join(data_dir, "models", scene_name, "textured.obj")
-        verts, faces, _ = load_obj(mesh_path, load_textures=False)
+        mesh_path = os.path.join(data_dir, "models", scene_name, "visual.ply")
+        o3d_mesh = o3d.io.read_triangle_mesh(mesh_path)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_mesh_path = os.path.join(tmp, 'tmp.obj')
+            o3d.io.write_triangle_mesh(tmp_mesh_path, o3d_mesh)
+            verts, faces, _ = load_obj(tmp_mesh_path, load_textures=False)
         faces = faces.verts_idx
         verts = project_verts(verts, RT)
         return verts, faces
