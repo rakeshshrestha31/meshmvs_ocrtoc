@@ -258,22 +258,75 @@ class MVSNet(nn.Module):
             'features': [], **{i: [] for i in depth_keys}
         }
 
-        for view_list in view_lists:
-            reordered_features = [features[i] for i in view_list]
-            reordered_proj_matrices = [proj_matrices[:, i] for i in view_list]
-            reordered_imgs = [imgs[:, i] for i in view_list]
-            costvolume_output = self.compute_costvolume_depth(
-                reordered_imgs, reordered_features, reordered_proj_matrices, depth_values
-            )
-            # costvolume_outputs['features'].append(costvolume_output['features'])
-            for depth_key in depth_keys:
-                # depth_key: '*depths', depth_key[:-1]: '*depth'
-                costvolume_outputs[depth_key].append(costvolume_output[depth_key[:-1]])
+        num_features = len(features[0])
 
-        for depth_key in depth_keys:
-            costvolume_outputs[depth_key] = torch.stack(
-                costvolume_outputs[depth_key], dim=1
+        reordered_features = [
+            [ [] for j in range(len(view_lists)) ]
+            for i in range(num_features)
+        ]
+        reordered_proj_matrices = []
+        reordered_imgs = []
+
+        for view_list_idx, view_list in enumerate(view_lists):
+            for view_idx in view_list:
+                view_features = []
+                for feature_idx, feature in enumerate(features[view_idx]):
+                    reordered_features[feature_idx][view_list_idx].append(feature)
+
+            for feature_idx in range(num_features):
+                reordered_features[feature_idx][view_list_idx] = torch.stack(
+                    reordered_features[feature_idx][view_list_idx], dim=0
+                )
+
+            reordered_proj_matrices.append(
+                torch.stack([proj_matrices[:, i] for i in view_list], dim=0)
             )
+            reordered_imgs.append(
+                torch.stack([imgs[:, i] for i in view_list], dim=0)
+            )
+
+        # list of [num_views, view_lists, batch_size, num_channel, h, w]
+        reordered_features = [
+            torch.stack(i, dim=1) for i in reordered_features
+        ]
+        # [num_views, view_lists, batch_size, 2, 4, 4]
+        reordered_proj_matrices = torch.stack(reordered_proj_matrices, dim=1)
+        # [num_views, view_lists, batch_size, 3, h, w]
+        reordered_imgs = torch.stack(reordered_imgs, dim=1)
+
+        # combine view_lists and batch size
+        # i.e. [num_views, view_lists * batch_size, ...]
+        reordered_features = [
+            i.reshape(
+                num_views, len(view_lists) * batch_size, i.shape[-3], i.shape[-2], i.shape[-1]
+            )
+            for i in reordered_features
+        ]
+        reordered_proj_matrices = reordered_proj_matrices.reshape(
+            num_views, len(view_lists) * batch_size, 2, 4, 4
+        )
+        reordered_imgs = reordered_imgs.reshape(
+            num_views, len(view_lists) * batch_size, 3, imgs.shape[-2], imgs.shape[-1]
+        )
+
+        # repeat depth values for each view_lists
+        depth_values = depth_values.unsqueeze(0) \
+                            .expand(len(view_lists), -1, -1) \
+                            .view(len(view_lists) * batch_size, -1)
+
+        costvolume_output = self.compute_costvolume_depth(
+            reordered_imgs, reordered_features, reordered_proj_matrices, depth_values
+        )
+        # costvolume_outputs['features'].append(costvolume_output['features'])
+        for depth_key in depth_keys:
+            # depth_key: '*depths', depth_key[:-1]: '*depth'
+
+            # [view_lists * batch_size, h, w]
+            depth = costvolume_output[depth_key[:-1]]
+            # [batch_size, view_lists, h, w]
+            costvolume_outputs[depth_key] = depth.view(
+                len(view_lists), batch_size, depth.shape[-2], depth.shape[-1]
+            ).permute(1, 0, 2, 3)
 
         return costvolume_outputs
 
