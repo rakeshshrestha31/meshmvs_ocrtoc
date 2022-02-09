@@ -81,11 +81,15 @@ class MeshVoxMultiViewDataset(MeshVoxDataset):
                 self.data_dir, scene_name, RT
             )
 
-        # voxels, P = None, None
-        # if self.voxel_size > 0:
-        #     voxels, P = self.read_voxels(
-        #         self.data_dir, sid, mid, ref_iid, K, RT
-        #     )
+        if self.voxel_size > 0:
+            voxels = []
+            for idx, iid in enumerate(image_ids):
+                voxels.append(self.read_voxels(
+                    self.data_dir, scene_name, iid, K, extrinsics[idx]
+                ))
+            voxels = torch.stack(voxels, dim=0)
+        else:
+            voxels = None
 
         P = K.mm(RT)
 
@@ -94,5 +98,5 @@ class MeshVoxMultiViewDataset(MeshVoxDataset):
             "imgs": imgs, "verts": verts, "faces": faces, "points": points,
             "normals": normals, "Ps": P, "id_str": id_str,
             "intrinsics": K, "extrinsics": extrinsics,
-            "voxels": None, # voxels,
+            "voxels": voxels,
         }

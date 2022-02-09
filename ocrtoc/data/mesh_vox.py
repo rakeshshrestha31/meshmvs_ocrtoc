@@ -183,21 +183,23 @@ class MeshVoxDataset(Dataset):
         verts = project_verts(verts, RT)
         return verts, faces
 
-    def read_voxels(self, data_dir, sid, mid, iid, K, RT):
+    def read_voxels(self, data_dir, scene_name, iid, K, RT):
         # Use precomputed voxels if we have them, otherwise return voxel_coords
         # and we will compute voxels in postprocess
-        voxel_file = "vox%d/%03d.pt" % (self.voxel_size, iid)
-        voxel_file = os.path.join(self.data_dir, sid, mid, voxel_file)
+        voxel_dir = os.path.join(
+            data_dir, "scenes", scene_name, "meshmvs_voxels"
+        )
+        voxel_file = os.path.join(voxel_dir, "vox_%03d.pt" % iid)
         P = None
 
         if os.path.isfile(voxel_file):
             voxels = torch.load(voxel_file)
         else:
-            voxel_path = os.path.join(self.data_dir, sid, mid, "voxels.pt")
+            voxel_path = os.path.join(voxel_dir, "voxels.pt")
             voxel_data = torch.load(voxel_path)
             voxels = voxel_data["voxel_coords"]
             P = K.mm(RT)
-        return voxels, P
+        return voxels
 
     def sample_points_normals(self, data_dir, scene_name, RT):
         samples = self.mid_to_samples.get(scene_name, None)
@@ -305,16 +307,6 @@ class MeshVoxDataset(Dataset):
         else:
             collated_batch["meshes"] = None
 
-        if "voxels" not in batch[0] or batch[0]["voxels"] is None:
-            voxels = None
-            Ps = None
-        elif batch[0]["voxels"].dim() == 2:
-            # They are voxel coords
-            collated_batch["voxels"] = extract_key(batch, "voxels")
-        elif batch[0]["voxels"].dim() == 3:
-            # They are actual voxels
-            collated_batch["voxels"] = none_safe_collate_fn(batch, "voxels")
-
         def none_safe_collate_fn(batch, key):
             """
             Simple collate with protection against None items
@@ -324,6 +316,16 @@ class MeshVoxDataset(Dataset):
                 return torch.stack(items, dim=0)
             else:
                 return None
+
+        if "voxels" not in batch[0] or batch[0]["voxels"] is None:
+            voxels = None
+            Ps = None
+        elif batch[0]["voxels"].dim() == 2:
+            # They are voxel coords
+            collated_batch["voxels"] = extract_key(batch, "voxels")
+        elif batch[0]["voxels"].dim() == 4:
+            # They are actual voxels
+            collated_batch["voxels"] = none_safe_collate_fn(batch, "voxels")
 
         collated_batch["points"] = none_safe_collate_fn(batch, "points")
         collated_batch["normals"] = none_safe_collate_fn(batch, "normals")
@@ -359,9 +361,9 @@ class MeshVoxDataset(Dataset):
                 # We used cached voxels on disk, just cast and return
                 processed_batch["voxels"] = batch["voxels"].to(device)
                 # TODO: need to transform voxel grid to all views
-                raise NotImplementedError(
-                    "need to transform voxel grid to all views"
-                )
+                # raise NotImplementedError(
+                #     "need to transform voxel grid to all views"
+                # )
             else:
                 # We got a list of voxel_coords, and need to compute voxels on-the-fly
                 voxel_coords = batch["voxels"]

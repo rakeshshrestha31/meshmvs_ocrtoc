@@ -8,6 +8,8 @@ import tqdm
 import json
 import gc
 import traceback
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 import detectron2.utils.comm as comm
 import torch
@@ -572,7 +574,9 @@ def debug_batch(batch, model, model_kwargs):
     model_output = model(batch["imgs"], **model_kwargs)
     depth_points = model_output["depth_clouds"]
     cubified = model_output["init_meshes"]
+    gt_voxels = batch["voxels"]
 
+    from shapenet.modeling.voxel_ops import cubify, logit
     rel_extrinsics = relative_extrinsics(
         batch["extrinsics"], batch["extrinsics"][:, 0]
     )
@@ -596,6 +600,7 @@ def debug_batch(batch, model, model_kwargs):
             o3d.utility.Vector3iVector(cubified_faces),
         )
         # geometries.append(cubified_o3d)
+        o3d.io.write_triangle_mesh(f"cubified_{batch_idx}.ply", cubified_o3d)
 
         if (batch.get("points", None) is not None) \
                 and (batch.get("normals", None) is not None):
@@ -607,16 +612,16 @@ def debug_batch(batch, model, model_kwargs):
             )
             gt_pcd.paint_uniform_color([1.0, 0, 0])
             geometries.append(gt_pcd)
+            o3d.io.write_point_cloud(f"gt_pcd_{batch_idx}.ply", gt_pcd)
 
         if batch.get("meshes", None) is not None:
             gt_mesh = pytorch3d_mesh_to_o3d(batch["meshes"][batch_idx])
             geometries.append(gt_mesh)
+            o3d.io.write_point_cloud(f"gt_mesh_{batch_idx}.ply", gt_mesh)
 
         mesh_pred = pytorch3d_mesh_to_o3d(model_output["meshes_pred"][-1][batch_idx])
         geometries.append(mesh_pred)
-        o3d.io.write_triangle_mesh(
-            "mesh_pred.ply", mesh_pred
-        )
+        o3d.io.write_triangle_mesh(f"mesh_pred_{batch_idx}.ply", mesh_pred)
 
         for view_idx in range(len(depth_points[batch_idx])):
             pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(
@@ -625,6 +630,7 @@ def debug_batch(batch, model, model_kwargs):
             pcd.paint_uniform_color([0.0, 0.0, 1.0])
 
             geometries.append(pcd)
+            o3d.io.write_point_cloud(f"depth_points_{batch_idx}_{view_idx}.ply", pcd)
 
             T_cam_world = rel_extrinsics[batch_idx][view_idx] \
                             .detach().cpu().numpy()
@@ -634,6 +640,20 @@ def debug_batch(batch, model, model_kwargs):
                     .create_coordinate_frame(size=0.1, origin=[0, 0, 0])
                     .transform(T_world_cam)
             )
+
+            gt_cubified = cubify(
+                logit(gt_voxels[batch_idx, view_idx, ...].unsqueeze(0).float() + 1e-3),
+                model.voxel_size, model.cubify_threshold
+            )
+            cubified_vertices = gt_cubified[batch_idx].verts_packed().detach().cpu().numpy()
+            cubified_faces = gt_cubified[batch_idx].faces_packed().detach().cpu().numpy()
+            gt_cubified_o3d = o3d.geometry.TriangleMesh(
+                o3d.utility.Vector3dVector(cubified_vertices),
+                o3d.utility.Vector3iVector(cubified_faces),
+            ).transform(T_world_cam)
+            geometries.append(gt_cubified_o3d)
+            o3d.io.write_triangle_mesh(f"gt_cubified_{batch_idx}_{view_idx}.ply", gt_cubified_o3d)
+
 
     o3d.visualization.draw_geometries([
         *geometries,
