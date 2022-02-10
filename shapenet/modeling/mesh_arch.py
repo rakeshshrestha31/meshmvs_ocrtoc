@@ -1437,7 +1437,20 @@ class SphereInitMultiViewHead(VoxMeshMultiViewHead):
         rel_extrinsics, P \
             = self.process_extrinsics(extrinsics, batch_size, device)
 
-        init_meshes = ico_sphere(self.ico_sphere_level, device).extend(batch_size)
+        init_mesh = ico_sphere(self.ico_sphere_level, device)
+        init_mesh.scale_verts_(0.1)
+
+        # move to average depth distance
+        offset = torch.tensor([
+            0.0, 0.0, -(SHAPENET_MIN_ZMIN + SHAPENET_MAX_ZMAX)/2.0
+        ], device=device).unsqueeze(0)
+        verts, faces = init_mesh.verts_packed(), init_mesh.faces_packed()
+        verts = verts + offset
+
+        init_meshes = Meshes(
+            verts=verts.unsqueeze(0), faces=faces.unsqueeze(0)
+        ).extend(batch_size)
+
         refined_meshes, _, view_weights = self.mesh_head(
             feats_extractor, init_meshes, P
         )
