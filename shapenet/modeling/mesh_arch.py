@@ -614,7 +614,7 @@ class VoxMeshDepthHead(VoxDepthHead):
             print(
                 'Unrecognized contrastive depth type:', self.contrastive_depth_type
             )
-            exit(1)
+            raise RuntimeError()
 
         return post_voxel_depth_feat_dims
 
@@ -943,7 +943,7 @@ class VoxMeshDepthHead(VoxDepthHead):
             print(
                 'Unrecognized contrastive depth type:', self.contrastive_depth_type
             )
-            exit(1)
+            raise RuntimeError()
 
     def get_mesh_head_features_extractor(
             self, imgs, pred_depths, rel_extrinsics
@@ -1372,6 +1372,75 @@ class SphereInitHead(nn.Module):
 
         init_meshes = ico_sphere(self.ico_sphere_level, device).extend(N)
         refined_meshes = self.mesh_head(img_feats, init_meshes, P)
+        return {
+            "voxel_scores":None, "meshes_pred": refined_meshes,
+            "init_meshes": init_meshes,
+        }
+
+
+@MESH_ARCH_REGISTRY.register()
+class SphereInitMultiViewHead(VoxMeshMultiViewHead):
+    def __init__(self, cfg):
+        nn.Module.__init__(self)
+
+        self.cfg = cfg
+        # fmt: off
+        backbone                = cfg.MODEL.MESH_HEAD.RGB_BACKBONE
+        self.ico_sphere_level   = cfg.MODEL.MESH_HEAD.ICO_SPHERE_LEVEL
+        # fmt: on
+
+        # backbone
+        self.backbone, feat_dims = build_backbone(backbone)
+
+        # multi-view feature fusion
+        prefusion_feat_dims = sum(feat_dims)
+        postfusion_feat_dims = self.init_feature_fusion(
+            cfg, prefusion_feat_dims
+        )
+
+        # mesh head
+        # times 3 cuz multi-view (mean, avg, std) features will be used
+        cfg.MODEL.MESH_HEAD.COMPUTED_INPUT_CHANNELS = postfusion_feat_dims
+        self.mesh_head = MeshRefinementHead(cfg, self.fuse_multiview_features)
+
+    def _get_projection_matrix(self, N, device):
+        assert(self.K.shape[0] == N)
+        return self.K.to(device).detach()
+
+    def _set_projection_matrix(self, K):
+        self.K = K
+
+    def forward(self, imgs, intrinsics, extrinsics, **kwargs):
+        """
+        Args:
+        - imgs: tensor of shape (B, V, 3, H, W)
+        - intrinsics: tensor of shape (B, V, 4, 4)
+        - extrinsics: tensor of shape (B, V, 4, 4)
+        """
+        self._set_projection_matrix(intrinsics)
+
+        batch_size = imgs.shape[0]
+        num_views = imgs.shape[1]
+        device = imgs.device
+
+        # flatten the batch and views
+        flat_imgs = imgs.view(-1, *(imgs.shape[2:]))
+        img_feats = self.backbone(flat_imgs)
+
+        img_feats = [
+            i.view(batch_size, num_views, *(i.shape[1:])) for i in img_feats
+        ]
+        feats_extractor = functools.partial(
+            self.extract_img_features, img_feats=img_feats
+        )
+
+        rel_extrinsics, P \
+            = self.process_extrinsics(extrinsics, batch_size, device)
+
+        init_meshes = ico_sphere(self.ico_sphere_level, device).extend(batch_size)
+        refined_meshes, _, view_weights = self.mesh_head(
+            feats_extractor, init_meshes, P
+        )
         return {
             "voxel_scores":None, "meshes_pred": refined_meshes,
             "init_meshes": init_meshes,
