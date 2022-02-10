@@ -64,7 +64,7 @@ def main_worker_eval(worker_id, args):
 
     # build test set
     test_loader = build_data_loader(
-        cfg, get_dataset_name(cfg), "test", multigpu=False
+        cfg, get_dataset_name(cfg), "val", multigpu=False
     )
     logger.info("test - %d" % len(test_loader))
 
@@ -95,11 +95,11 @@ def main_worker_eval(worker_id, args):
     # disable_running_stats(model)
 
     val_loader = build_data_loader(
-        cfg, get_dataset_name(cfg), "test", multigpu=False
+        cfg, get_dataset_name(cfg), "train_eval", multigpu=False
     )
     logger.info("val - %d" % len(val_loader))
     test_metrics, test_preds = evaluate_split(
-        model, val_loader, prefix="val_", max_predictions=100
+        model, val_loader, prefix="val_", max_predictions=20 # 100
     )
     str_out = "Results on test"
     for k, v in test_metrics.items():
@@ -117,41 +117,49 @@ def main_worker_eval(worker_id, args):
         for k, v in test_metrics.items():
             str_out += "%s %.4f " % (k, v)
         logger.info(str_out)
-    elif args.eval_p2m:
-        logger.info("running eval_p2m")
-        test_metrics = evaluate_test_p2m(model, test_loader)
-
-        # model_type -> mesh, vox
-        for model_type in test_metrics.keys():
-            # model_type -> precisions, recalls, f_scores
-            for metric_type in test_metrics[model_type].keys():
-                # model_type -> sum, mean, object
-                for metric_subtype in test_metrics[model_type][metric_type].keys():
-                    file_path = os.path.join(
-                        cfg.OUTPUT_DIR,
-                        "%s_%s_%s.json" % (model_type, metric_type, metric_subtype)
-                    )
-                    metric = test_metrics[model_type][metric_type][metric_subtype]
-                    with open(file_path, "w") as f:
-                        json.dump({
-                            key: value.tolist()
-                            for key, value in metric.items()
-                        }, f, indent=4)
-
     else:
-        logger.info("saving predictions")
-        prediction_dir = os.path.join(
-            cfg.OUTPUT_DIR, "predictions", "eval", "predict"
+        test_metrics, test_preds = evaluate_split(
+            model, test_loader, prefix="test_", max_predictions=-1
         )
-        if (not args.eval_save_point_clouds) and (not args.eval_save_meshes):
-            logger.info("both save-point-clouds and save-meshes false")
-            args.eval_save_point_clouds = True
+        str_out = "Results on test: "
+        for k, v in test_metrics.items():
+            str_out += "%s %.4f " % (k, v)
+        logger.info(str_out)
+    # elif args.eval_p2m:
+    #     logger.info("running eval_p2m")
+    #     test_metrics = evaluate_test_p2m(model, test_loader)
 
-        save_predictions(
-            model, test_loader, prediction_dir,
-            args.eval_save_point_clouds, args.eval_save_meshes,
-            args.eval_save_initial_meshes
-        )
+    #     # model_type -> mesh, vox
+    #     for model_type in test_metrics.keys():
+    #         # model_type -> precisions, recalls, f_scores
+    #         for metric_type in test_metrics[model_type].keys():
+    #             # model_type -> sum, mean, object
+    #             for metric_subtype in test_metrics[model_type][metric_type].keys():
+    #                 file_path = os.path.join(
+    #                     cfg.OUTPUT_DIR,
+    #                     "%s_%s_%s.json" % (model_type, metric_type, metric_subtype)
+    #                 )
+    #                 metric = test_metrics[model_type][metric_type][metric_subtype]
+    #                 with open(file_path, "w") as f:
+    #                     json.dump({
+    #                         key: value.tolist()
+    #                         for key, value in metric.items()
+    #                     }, f, indent=4)
+
+    # else:
+    #     logger.info("saving predictions")
+    #     prediction_dir = os.path.join(
+    #         cfg.OUTPUT_DIR, "predictions", "eval", "predict"
+    #     )
+    #     if (not args.eval_save_point_clouds) and (not args.eval_save_meshes):
+    #         logger.info("both save-point-clouds and save-meshes false")
+    #         args.eval_save_point_clouds = True
+
+    #     save_predictions(
+    #         model, test_loader, prediction_dir,
+    #         args.eval_save_point_clouds, args.eval_save_meshes,
+    #         args.eval_save_initial_meshes
+    #     )
     # else:
     #     evaluate_test(model, test_loader)
 
