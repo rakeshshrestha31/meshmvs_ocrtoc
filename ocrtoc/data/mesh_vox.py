@@ -16,7 +16,11 @@ from torch.utils.data.dataloader import default_collate
 import torchvision.transforms as T
 from PIL import Image
 from shapenet.data.utils import imagenet_preprocess
-from shapenet.utils.coords import project_verts, world_coords_to_voxel
+from shapenet.utils.coords import (
+    project_verts, world_coords_to_voxel,
+    SHAPENET_MAX_ZMAX, SHAPENET_MIN_ZMIN
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -126,10 +130,16 @@ class MeshVoxDataset(Dataset):
         # compatible with shapenet.utils.coords.get_blender_intrinsic_matrix()
         K_norm[0, 0] = K[0, 0] * 2.0 / (w - 1)
         K_norm[1, 1] = K[1, 1] * 2.0 / (h - 1)
+
         K_norm[0, 2] = (K[0, 2] * (2.0 / (w - 1))) - 1
         K_norm[1, 2] = (K[1, 2] * (2.0 / (h - 1))) - 1
+
+        # K_norm[2, 2] = -(SHAPENET_MAX_ZMAX + SHAPENET_MIN_ZMIN) \
+        #                     / (SHAPENET_MAX_ZMAX - SHAPENET_MIN_ZMIN)
+        # K_norm[2, 3] = - 2 * SHAPENET_MAX_ZMAX * SHAPENET_MIN_ZMIN \
+        #                     / (SHAPENET_MAX_ZMAX - SHAPENET_MIN_ZMIN)
         K_norm[2, 2] = -1
-        K_norm[2, 3] = 0
+        K_norm[2, 3] = - 2 * SHAPENET_MIN_ZMIN
         K_norm[3, 2] = -1
 
         return K_norm
