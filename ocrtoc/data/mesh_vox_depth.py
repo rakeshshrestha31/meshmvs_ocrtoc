@@ -121,9 +121,11 @@ class MeshVoxDepthDataset(MeshVoxMultiViewDataset):
             extrinsics = torch.stack(
                 [metadata["extrinsics"][iid] for iid in image_ids], dim=0
             )
+            id_str = "%s-%s" % (scene_name, '_'.join([str(i) for i in image_ids]))
             return {
                 "depths": depths, "masks": masks, "imgs": imgs,
-                "intrinsics": K, "extrinsics": extrinsics
+                "intrinsics": K, "extrinsics": extrinsics,
+                "id_str": id_str
             }
         else:
             return {
