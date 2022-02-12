@@ -97,16 +97,15 @@ def get_ocrtoc_cfg():
     cfg.MODEL.MVSNET.CHECKPOINT = ""
     cfg.MODEL.MVSNET.FREEZE = False
 
-    # the depth values are different than Pixel2Mesh and 3D-R2N2
-    # the depths here are not scaled by the factor 0.57 here
-    cfg.MODEL.MVSNET.MIN_DEPTH = 0.05
-    cfg.MODEL.MVSNET.DEPTH_INTERVAL = 0.03
+    # min/max depth: 0.60492384 2.1942575
+    cfg.MODEL.MVSNET.MIN_DEPTH = 0.604
+    cfg.MODEL.MVSNET.DEPTH_INTERVAL = 0.034
     cfg.MODEL.MVSNET.DEPTH_REFINE = True
 
     cfg.MODEL.MVSNET.NUM_DEPTHS = 48
     cfg.MODEL.MVSNET.INPUT_IMAGE_SIZE = (224, 224)
-    cfg.MODEL.MVSNET.FOCAL_LENGTH = (157.174325, 279.4210223)
-    cfg.MODEL.MVSNET.PRINCIPAL_POINT = (114.6402250, 110.548044)
+    cfg.MODEL.MVSNET.FOCAL_LENGTH = (248.0, 248.0)
+    cfg.MODEL.MVSNET.PRINCIPAL_POINT = (111.5, 111.5)
     # loss weights
     cfg.MODEL.MVSNET.PRED_DEPTH_WEIGHT = 0.1
     cfg.MODEL.MVSNET.RENDERED_DEPTH_WEIGHT = 0.00

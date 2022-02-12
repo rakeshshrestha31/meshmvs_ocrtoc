@@ -17,7 +17,7 @@ import torchvision.transforms as T
 from PIL import Image
 from shapenet.data.utils import imagenet_preprocess
 from shapenet.utils.coords import (
-    project_verts, world_coords_to_voxel,
+    project_verts, world_coords_to_voxel, get_blender_intrinsic_matrix,
     SHAPENET_MAX_ZMAX, SHAPENET_MIN_ZMIN
 )
 
@@ -99,12 +99,12 @@ class MeshVoxDataset(Dataset):
     @staticmethod
     def read_camera_parameters(data_dir, scene_name):
         camera_poses = np.load(
-            os.path.join(data_dir, "scenes", scene_name, "camera_poses.npy"),
+            os.path.join(data_dir, scene_name, "meshmvs_camera_poses.npy"),
             allow_pickle=True
         ).item()
 
         object_poses = np.load(
-            os.path.join(data_dir, "scenes", scene_name, "object_poses.npy"),
+            os.path.join(data_dir, scene_name, "meshmvs_object_poses.npy"),
             allow_pickle=True
         ).item()
         object_name, object_pose = next(iter(object_poses.items()))
@@ -112,10 +112,10 @@ class MeshVoxDataset(Dataset):
         extrinsics = MeshVoxDataset.process_extrinsics(camera_poses, object_pose)
 
         K = np.load(
-            os.path.join(data_dir, "scenes", scene_name, "meshmvs_camK.npy"),
+            os.path.join(data_dir, scene_name, "meshmvs_camK.npy"),
         ).reshape((3, 3)).astype(np.float32)
         K = MeshVoxDataset.normalize_intrinsics(K)
-        K = torch.from_numpy(K)
+        # K = torch.from_numpy(K)
 
         return {
             "extrinsics": extrinsics, "intrinsic": K, "object_name": object_name
@@ -123,26 +123,7 @@ class MeshVoxDataset(Dataset):
 
     @staticmethod
     def normalize_intrinsics(K):
-        # TODO: soft code w, h
-        w, h = 224, 224
-        K_norm = np.zeros((4, 4), dtype=np.float32)
-
-        # compatible with shapenet.utils.coords.get_blender_intrinsic_matrix()
-        K_norm[0, 0] = K[0, 0] * 2.0 / (w - 1)
-        K_norm[1, 1] = K[1, 1] * 2.0 / (h - 1)
-
-        K_norm[0, 2] = (K[0, 2] * (2.0 / (w - 1))) - 1
-        K_norm[1, 2] = (K[1, 2] * (2.0 / (h - 1))) - 1
-
-        # K_norm[2, 2] = -(SHAPENET_MAX_ZMAX + SHAPENET_MIN_ZMIN) \
-        #                     / (SHAPENET_MAX_ZMAX - SHAPENET_MIN_ZMIN)
-        # K_norm[2, 3] = - 2 * SHAPENET_MAX_ZMAX * SHAPENET_MIN_ZMIN \
-        #                     / (SHAPENET_MAX_ZMAX - SHAPENET_MIN_ZMIN)
-        K_norm[2, 2] = -1
-        K_norm[2, 3] = - 2 * SHAPENET_MIN_ZMIN
-        K_norm[3, 2] = -1
-
-        return K_norm
+        return get_blender_intrinsic_matrix()
 
     @staticmethod
     def process_extrinsics(camera_poses, object_pose):
@@ -172,7 +153,7 @@ class MeshVoxDataset(Dataset):
     @staticmethod
     def read_image(data_dir, scene_name, iid):
         img_path = os.path.join(
-            data_dir, "scenes", scene_name,
+            data_dir, scene_name,
             "meshmvs_training_images", f"color_{iid}.png"
         )
         # Load the image
@@ -182,7 +163,7 @@ class MeshVoxDataset(Dataset):
 
     @staticmethod
     def read_mesh(data_dir, scene_name, RT):
-        mesh_path = os.path.join(data_dir, "models", scene_name, "visual.ply")
+        mesh_path = os.path.join(data_dir, scene_name, "meshmvs_model.obj")
         o3d_mesh = o3d.io.read_triangle_mesh(mesh_path)
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -197,7 +178,7 @@ class MeshVoxDataset(Dataset):
         # Use precomputed voxels if we have them, otherwise return voxel_coords
         # and we will compute voxels in postprocess
         voxel_dir = os.path.join(
-            data_dir, "scenes", scene_name, "meshmvs_voxels"
+            data_dir, scene_name, "meshmvs_voxels"
         )
         voxel_file = os.path.join(voxel_dir, "vox_%03d.pt" % iid)
         P = None
@@ -216,7 +197,7 @@ class MeshVoxDataset(Dataset):
         if samples is None:
             # They were not cached in memory, so read off disk
             samples_path = os.path.join(
-                data_dir, "scenes", scene_name, "meshmvs_gt_labels.dat"
+                data_dir, scene_name, "meshmvs_gt_labels.dat"
             )
             with open(samples_path, 'rb') as f:
                 samples = pickle.load(f)
