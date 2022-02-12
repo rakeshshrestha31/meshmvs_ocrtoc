@@ -61,7 +61,7 @@ class MeshVoxDepthDataset(MeshVoxMultiViewDataset):
     @staticmethod
     def read_depth(data_dir, scene_name, iid):
         depth_file = os.path.join(
-            data_dir, "scenes", scene_name,
+            data_dir, scene_name,
             "meshmvs_training_images", "depth_" + str(iid) + ".png"
         )
         if os.path.isfile(depth_file):
@@ -76,7 +76,7 @@ class MeshVoxDepthDataset(MeshVoxMultiViewDataset):
     @staticmethod
     def read_mask(data_dir, scene_name, iid):
         mask_file = os.path.join(
-            data_dir, "scenes", scene_name,
+            data_dir, scene_name,
             "gt_masks", "mask_" + str(iid) + ".png"
         )
         if os.path.isfile(mask_file):

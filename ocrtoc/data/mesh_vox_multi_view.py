@@ -72,7 +72,7 @@ class MeshVoxMultiViewDataset(MeshVoxDataset):
         # Maybe read mesh
         verts, faces = None, None
         if self.return_mesh:
-            verts, faces = self.read_mesh(self.data_dir, metadata["object_name"], RT)
+            verts, faces = self.read_mesh(self.data_dir, scene_name, RT)
 
         # Maybe use cached samples
         points, normals = None, None

@@ -28,7 +28,7 @@ from shapenet.modeling.voxel_ops import logit
 
 from ocrtoc.data.mesh_vox import MeshVoxDataset
 
-from tools.preprocess_shapenet import align_bbox
+from tools.preprocess_shapenet import align_bbox, voxelize
 
 
 logger = logging.getLogger("preprocess")
@@ -67,7 +67,7 @@ def main(args):
 
 
 def handle_model(args, scene_name, image_idds):
-    scene_dir = args.dataset_root / "scenes" / scene_name
+    scene_dir = args.dataset_root / scene_name
     voxel_dir = scene_dir / "meshmvs_voxels"
     voxel_path = voxel_dir / "voxels_world.binvox"
 
@@ -86,11 +86,12 @@ def handle_model(args, scene_name, image_idds):
         str(args.dataset_root), scene_name
     )
     extrinsics = camera_parameters["extrinsics"]
-    intrinsic = camera_parameters["intrinsic"]
+    intrinsic = camera_parameters["intrinsic"].cuda()
     object_name = camera_parameters["object_name"]
+    print(intrinsic)
 
     verts, faces = MeshVoxDataset.read_mesh(
-        args.dataset_root, object_name, torch.eye(4)
+        args.dataset_root, scene_name, torch.eye(4)
     )
 
     # Align voxels to the same coordinate system as mesh verts, and save voxels.pt
@@ -116,41 +117,50 @@ def handle_model(args, scene_name, image_idds):
         # non-homogeneous
         voxel_coords_local = voxel_coords_local[0, :, :3]
 
+        P = intrinsic.mm(extrinsic)
         # 48 x 48 x 48 voxels
         V = 48
-        voxels = voxelize(voxel_coords_local, V).cpu()
+        # voxels = voxelize(voxel_coords_local, V).cpu()
+        voxels = voxelize(voxel_coords, P, V).cpu()
         torch.save(voxels, voxel_path)
 
         # debug_voxels(voxels, voxel_coords, extrinsic, verts, faces)
         # exit(0)
 
 
-def voxelize(voxel_coords, voxel_size):
-    norm_coords = voxel_grid_coords([voxel_size]*3)
-    grid_points = voxel_coords_to_world(
-        norm_coords.view(-1, 3)
-    ).view(1, -1, 3).contiguous().to(voxel_coords)
-    voxel_coords = voxel_coords.unsqueeze(0).contiguous()
-
-    depth_vox_nn = knn_points(grid_points, voxel_coords, K=1)
-
-    voxel_width = (SHAPENET_MAX_ZMAX - SHAPENET_MIN_ZMIN) / float(voxel_size)
-    voxel_width_square = voxel_width ** 2
-    depth_vox_positive = depth_vox_nn.dists.view(1, *([voxel_size]*3)) \
-                        < (voxel_width_square*8)
-    return depth_vox_positive.squeeze(0)
+# def voxelize(voxel_coords, voxel_size):
+#     norm_coords = voxel_grid_coords([voxel_size]*3)
+#     grid_points = voxel_coords_to_world(
+#         norm_coords.view(-1, 3)
+#     ).view(1, -1, 3).contiguous().to(voxel_coords)
+#     voxel_coords = voxel_coords.unsqueeze(0).contiguous()
+#
+#     depth_vox_nn = knn_points(grid_points, voxel_coords, K=1)
+#
+#     voxel_width = (SHAPENET_MAX_ZMAX - SHAPENET_MIN_ZMIN) / float(voxel_size)
+#     voxel_width_square = voxel_width ** 2
+#     depth_vox_positive = depth_vox_nn.dists.view(1, *([voxel_size]*3)) \
+#                         < (voxel_width_square*8)
+#     return depth_vox_positive.squeeze(0)
 
 
 def debug_voxels(voxels, voxel_coords, T_cam_world, verts, faces):
     T_cam_world = T_cam_world.cpu().numpy()
     print("non zero voxs", (voxels != 0).float().sum().item())
-    # debug
     import open3d as o3d
     o3d_mesh = o3d.geometry.TriangleMesh(
         o3d.utility.Vector3dVector(verts.cpu().numpy()),
         o3d.utility.Vector3iVector(faces.cpu().numpy())
     )
     o3d_mesh = o3d_mesh.transform(T_cam_world)
+
+    voxel_size = voxels.shape[-1]
+    norm_coords = voxel_grid_coords([voxel_size]*3)
+    grid_points = voxel_coords_to_world(norm_coords.view(-1, 3))
+    grid_pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(
+        grid_points.view(-1, 3).contiguous().cpu().numpy()
+    ))
+    # print('grid z: ', grid_points[:, 2].min(), grid_points[:, 2].max())
 
     from shapenet.modeling.voxel_ops import cubify
     cubified = cubify(
@@ -170,6 +180,7 @@ def debug_voxels(voxels, voxel_coords, T_cam_world, verts, faces):
 
     o3d.visualization.draw_geometries([
         o3d_mesh, voxels_pcd, cubified_o3d,
+        # grid_pcd,
         o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
     ])
     o3d.io.write_triangle_mesh("cubified.ply", cubified_o3d)

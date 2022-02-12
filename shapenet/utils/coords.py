@@ -8,7 +8,9 @@ import torch.nn.functional as F
 from pytorch3d.structures import Meshes
 from pytorch3d.utils import ico_sphere
 
-SHAPENET_MIN_ZMIN = 0.05 # 0.475 # 0.67
+# Actual min-max depth: 0.60492384 2.1942575
+# These are z-values after project_verts applied
+SHAPENET_MIN_ZMIN = 0.67
 SHAPENET_MAX_ZMAX = 0.92
 
 SHAPENET_AVG_ZMIN = 0.77
@@ -50,8 +52,10 @@ def blender_ndc_to_world(verts):
     verts == blender_ndc_to_world(project_verts(verts, K))
     """
     xx, yy, zz = verts.unbind(dim=1)
-    a1, a2, a3 = 2.1875, 2.1875, -1.002002
-    b1, b2 = -0.2002002, -1.0
+
+    K = get_blender_intrinsic_matrix()
+    a1, a2, a3 = K[0, 0], K[1, 1], K[2, 2]
+    b1, b2 = K[2, 3], K[3, 2]
     z = b1 / (b2 * zz - a3)
     y = (b2 / a2) * (z * yy)
     x = (b2 / a1) * (z * xx)
