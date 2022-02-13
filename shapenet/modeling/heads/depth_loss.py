@@ -36,7 +36,9 @@ def adaptive_berhu_loss(depth_gt, depth_est, mask, threshold=0.2):
     l2_part = l2_part / (2.*delta)
 
     loss = l1_part + l2_part
-    loss = torch.mean(loss)
+    # loss = torch.mean(loss)
+    # normalize w.r.t to valid pixels, not all pixels
+    loss = torch.sum(loss) / mask.sum()
     return loss
 
 
