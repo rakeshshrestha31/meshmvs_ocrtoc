@@ -109,6 +109,7 @@ class RefineNet(nn.Module):
     def forward(self, img, depth_init):
         concat = torch.cat((img, depth_init), dim=1)
         depth_residual = self.res(self.conv3(self.conv2(self.conv1(concat))))
+        # depth_residual = self.res(self.conv1(concat))
         depth_refined = depth_init + depth_residual
         return depth_refined
 
@@ -407,15 +408,15 @@ class VGG16P2M(nn.Module):
         self.features_dim = 960
 
         self.conv0_1 = nn.Conv2d(n_classes_input, 16, 3, stride=1, padding=1)
-        self.conv0_2 = nn.Conv2d(16, 16, 3, stride=1, padding=1)
+        # self.conv0_2 = nn.Conv2d(16, 16, 3, stride=1, padding=1)
 
         self.conv1_1 = nn.Conv2d(16, 32, 3, stride=2, padding=1)  # 224 -> 112
-        self.conv1_2 = nn.Conv2d(32, 32, 3, stride=1, padding=1)
-        self.conv1_3 = nn.Conv2d(32, 32, 3, stride=1, padding=1)
+        # self.conv1_2 = nn.Conv2d(32, 32, 3, stride=1, padding=1)
+        # self.conv1_3 = nn.Conv2d(32, 32, 3, stride=1, padding=1)
 
         self.conv2_1 = nn.Conv2d(32, 64, 3, stride=2, padding=1)  # 112 -> 56
-        self.conv2_2 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
-        self.conv2_3 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
+        # self.conv2_2 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
+        # self.conv2_3 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
 
         self._initialize_weights()  # not load the pre-trained model
 
@@ -434,17 +435,17 @@ class VGG16P2M(nn.Module):
 
     def forward(self, img):
         img = F.relu(self.conv0_1(img))
-        img = F.relu(self.conv0_2(img))
+        # img = F.relu(self.conv0_2(img))
         # img0 = torch.squeeze(img) # 224
 
         img = F.relu(self.conv1_1(img))
-        img = F.relu(self.conv1_2(img))
-        img = F.relu(self.conv1_3(img))
+        # img = F.relu(self.conv1_2(img))
+        # img = F.relu(self.conv1_3(img))
         # img1 = torch.squeeze(img) # 112
 
         img = F.relu(self.conv2_1(img))
-        img = F.relu(self.conv2_2(img))
-        img = F.relu(self.conv2_3(img))
+        # img = F.relu(self.conv2_2(img))
+        # img = F.relu(self.conv2_3(img))
         img2 = img
 
         return [img2]
@@ -480,13 +481,13 @@ class CostRegNet(nn.Module):
         self.conv0 = ConvBnReLU3D(64, self.features_list[0])
 
         self.conv1 = ConvBnReLU3D(self.features_list[0], self.features_list[1], stride=2)
-        self.conv2 = ConvBnReLU3D(self.features_list[1], self.features_list[1])
+        # self.conv2 = ConvBnReLU3D(self.features_list[1], self.features_list[1])
 
         self.conv3 = ConvBnReLU3D(self.features_list[1], self.features_list[2], stride=2)
-        self.conv4 = ConvBnReLU3D(self.features_list[2], self.features_list[2])
+        # self.conv4 = ConvBnReLU3D(self.features_list[2], self.features_list[2])
 
         self.conv5 = ConvBnReLU3D(self.features_list[2], self.features_list[3], stride=2)
-        self.conv6 = ConvBnReLU3D(self.features_list[3], self.features_list[3])
+        # self.conv6 = ConvBnReLU3D(self.features_list[3], self.features_list[3])
 
         self.conv7 = nn.Sequential(
             nn.ConvTranspose3d(self.features_list[3], self.features_list[2], kernel_size=3, padding=1, output_padding=1, stride=2, bias=False),
@@ -508,9 +509,12 @@ class CostRegNet(nn.Module):
     def forward(self, x):
         x_agg = []
         conv0 = self.conv0(x)
-        conv2 = self.conv2(self.conv1(conv0))
-        conv4 = self.conv4(self.conv3(conv2))
-        x = self.conv6(self.conv5(conv4))
+        # conv2 = self.conv2(self.conv1(conv0))
+        conv2 = self.conv1(conv0)
+        # conv4 = self.conv4(self.conv3(conv2))
+        conv4 = self.conv3(conv2)
+        # x = self.conv6(self.conv5(conv4))
+        x = self.conv5(conv4)
         x_agg.append(x)
 
         x = conv4 + self.conv7(x)
