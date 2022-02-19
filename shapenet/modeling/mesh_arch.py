@@ -1160,26 +1160,65 @@ class MeshDepthHead(VoxMeshDepthHead):
         ])
 
         voxel_size = self.cfg.MODEL.VOXEL_HEAD.VOXEL_SIZE
-        norm_coords = voxel_grid_coords([voxel_size]*3)
-        grid_points = voxel_coords_to_world(
-            norm_coords.view(-1, 3)
-        ).view(1, -1, 3).expand(batch_size, -1, -1).to(device)
 
-        depth_vox_nn = knn_points(
-            grid_points, depth_clouds_struct.points_padded(),
-            lengths2=depth_clouds_struct.num_points_per_cloud(), K=1
-        )
+        with torch.no_grad():
+            P = torch.bmm(intrinsics, rel_extrinsics[:, 0, ...])
+            depth_vox_positive = self.voxelize(
+                depth_clouds_struct.points_padded(), P, voxel_size
+            )
 
-        voxel_width = (SHAPENET_MAX_ZMAX - SHAPENET_MIN_ZMIN) / float(voxel_size)
-        voxel_width_square = voxel_width ** 2
-        depth_vox_positive = depth_vox_nn.dists.view(batch_size, *([voxel_size]*3)) \
-                            < (voxel_width_square*8)
+        # norm_coords = voxel_grid_coords([voxel_size]*3)
+        # grid_points = voxel_coords_to_world(
+        #     norm_coords.view(-1, 3)
+        # ).view(1, -1, 3).expand(batch_size, -1, -1).to(device)
+
+        # depth_vox_nn = knn_points(
+        #     grid_points, depth_clouds_struct.points_padded(),
+        #     lengths2=depth_clouds_struct.num_points_per_cloud(), K=1
+        # )
+
+        # voxel_width = (SHAPENET_MAX_ZMAX - SHAPENET_MIN_ZMIN) / float(voxel_size)
+        # voxel_width_square = voxel_width ** 2
+        # depth_vox_positive = depth_vox_nn.dists.view(batch_size, *([voxel_size]*3)) \
+        #                     < (voxel_width_square*8)
+
         depth_vox_scores = self.binary_grid_to_logit(depth_vox_positive)
 
         return {
             "voxel_scores": depth_vox_scores, # filtered_vox_scores,
             "depth_clouds": depth_clouds_raw
         }
+
+
+    @staticmethod
+    def voxelize(world_coords, P, V):
+        batch_size = world_coords.shape[0]
+        device = world_coords.device
+        voxel_coords = world_coords_to_voxel(world_coords, P)
+
+        # Now voxels are in [-1, 1]^3; map to [0, V-1)^3
+        voxel_coords = 0.5 * (V - 1) * (voxel_coords + 1.0)
+        voxel_coords = voxel_coords.round().to(torch.int64)
+        valid = (0 <= voxel_coords) & (voxel_coords < V)
+        valid = valid[..., 0] & valid[..., 1] & valid[..., 2]
+        # world coords should not be all zeros (due to padding)
+        invalid = (
+                  (world_coords[..., 0] == 0)
+                & (world_coords[..., 1] == 0)
+                & (world_coords[..., 2] == 0)
+        )
+        valid = valid & (~invalid)
+
+        voxels = torch.zeros(batch_size, V, V, V, dtype=torch.bool, device=device)
+
+        # don't know if proper batched operation can be done here
+        for batch_idx in range(batch_size):
+            valid_batch = valid[batch_idx, :]
+            x, y, z = voxel_coords[batch_idx].unbind(dim=1)
+            x, y, z = x[valid_batch], y[valid_batch], z[valid_batch]
+            voxels[batch_idx, z, y, x] = 1
+
+        return voxels
 
     def save_voxels(self, depth_vox_scores, file_prefix):
         import pytorch3d.io
