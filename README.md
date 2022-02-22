@@ -1,71 +1,50 @@
-# MeshMVS: Multi-View Stereo Guided Mesh Reconstruction
-
-Open source code for [paper][paper]
-
-## Installation Requirements
-```pip install -r requirements.txt```
-
-To install
+## Copy required data
 ```
-pip install -e .
+cd <download_dir>
+unzip meshmvs_ocrtoc_dataset.zip
+mv meshmvs_ocrtoc_dataset <repo_dir>/datasets/ocrtoc/3d_dataset
+unzip output_meshvoxdepth_gtdepth.zip
+mv output_meshvoxdepth_gtdepth <repo_dir>/
+mv ocrtoc_splits_val05.json <repo_dir>/datasets/ocrtoc/
 ```
 
-### ShapeNet Dataset preparation
-See [INSTRUCTIONS_SHAPENET.md](INSTRUCTIONS_SHAPENET.md) for more instructions.
+## Start the container
+```
+xhost +local:'meshmvs'
 
-## Training
-```
-python tools/train_net_shapenet_depth.py \
-  --num-gpus 5 --config-file configs/shapenet/voxmesh_R50_depth.yaml \
-  SOLVER.NUM_EPOCHS 30 SOLVER.BATCH_SIZE 5 \
-  OUTPUT_DIR output_depth_only
-```
-
-```
-python tools/train_net_shapenet.py \
-  --num-gpus 5 --config-file configs/shapenet/voxmesh_R50_depth.yaml \
-  MODEL.MVSNET.CHECKPOINT output_depth_only/checkpoint_with_model.pt \
-  MODEL.MVSNET.FREEZE True \
-  MODEL.FEATURE_FUSION_METHOD multihead_attention \
-  MODEL.MULTIHEAD_ATTENTION.FEATURE_DIMS 480 MODEL.MULTIHEAD_ATTENTION.NUM_HEADS 5 \
-  SOLVER.BATCH_SIZE 5 SOLVER.BATCH_SIZE_EVAL 1 \
-  MODEL.MVSNET.RENDERED_DEPTH_WEIGHT 0.001 MODEL.MESH_HEAD.EDGE_LOSS_WEIGHT 0.0 \
-  MODEL.MVSNET.RENDERED_VS_GT_DEPTH_WEIGHT 0.00 \
-  MODEL.CONTRASTIVE_DEPTH_TYPE input_concat \
-  MODEL.VOXEL_HEAD.RGB_FEATURES_INPUT True \
-  MODEL.VOXEL_HEAD.DEPTH_FEATURES_INPUT False \
-  MODEL.VOXEL_HEAD.RGB_BACKBONE resnet50 \
-  MODEL.MESH_HEAD.RGB_FEATURES_INPUT True \
-  MODEL.MESH_HEAD.DEPTH_FEATURES_INPUT True \
-  OUTPUT_DIR output
-```
-
-## Evaluation
-```
-python tools/train_net_shapenet.py \
-  --eval-only \
-  --num-gpus 5 --config-file configs/shapenet/voxmesh_R50_depth.yaml \
-  MODEL.MVSNET.CHECKPOINT output_depth_only/checkpoint_with_model.pt \
-  MODEL.MVSNET.FREEZE True \
-  MODEL.FEATURE_FUSION_METHOD multihead_attention \
-  MODEL.MULTIHEAD_ATTENTION.FEATURE_DIMS 480 MODEL.MULTIHEAD_ATTENTION.NUM_HEADS 5 \
-  SOLVER.BATCH_SIZE 5 SOLVER.BATCH_SIZE_EVAL 1 \
-  MODEL.MVSNET.RENDERED_DEPTH_WEIGHT 0.001 MODEL.MESH_HEAD.EDGE_LOSS_WEIGHT 0.0 \
-  MODEL.MVSNET.RENDERED_VS_GT_DEPTH_WEIGHT 0.00 \
-  MODEL.CONTRASTIVE_DEPTH_TYPE input_concat \
-  MODEL.VOXEL_HEAD.RGB_FEATURES_INPUT True \
-  MODEL.VOXEL_HEAD.DEPTH_FEATURES_INPUT False \
-  MODEL.VOXEL_HEAD.RGB_BACKBONE resnet50 \
-  MODEL.MESH_HEAD.RGB_FEATURES_INPUT True \
-  MODEL.MESH_HEAD.DEPTH_FEATURES_INPUT True \
-  OUTPUT_DIR output MODEL.CHECKPOINT output/checkpoint_with_model.pt
-
+docker run --privileged -h meshmvs --name meshmvs -it --cap-add=SYS_PTRACE \
+   --net=host \
+   --add-host meshmvs:127.0.0.1 \
+   --env HOME=/home/${USER} \
+   --env USER=${USER} \
+   --env GROUP=${USER} \
+   --env USER_ID=`id -u ${USER}` \
+   --env GROUP_ID=`getent group ${USER} | awk -F: '{printf $$3}'` \
+   --env EMAIL \
+   --env GIT_AUTHOR_EMAIL \
+   --env GIT_AUTHOR_NAME \
+   --env GIT_COMMITTER_EMAIL \
+   --env GIT_COMMITTER_NAME \
+   --env SSH_AUTH_SOCK \
+   --env TERM \
+   --env DISPLAY \
+   --env VIDEO_GROUP_ID=`getent group video | awk -F: '{printf $$3}'` \
+   --volume <repo_dir>:/workspace \
+   --volume /dev/dri:/dev/dri \
+   --volume /dev/input:/dev/input \
+   --volume /tmp/.X11-unix:/tmp/.X11-unix \
+   --volume /dev/shm:/dev/shm \
+   --volume /home/${USER}/.ssh:/home/${USER}/.ssh \
+   --volume /run/user/`id -u ${USER}`/keyring/ssh:/run/user/`id -u ${USER}`/keyring/ssh \
+   --gpus all \
+   --env NVIDIA_VISIBLE_DEVICES=all \
+   --env NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics,display \
+   --env LD_LIBRARY_PATH=/usr/local/nvidia/lib64 \
+   rakeshshrestha/meshmvs:latest bash
 ```
 
-Install [Pixel2Mesh++](https://github.com/walsvid/Pixel2MeshPlusPlus) for f-score
+## Start training inside the container
 ```
-python f_score.py --gpu_id 0 --save_path ~/projects/meshrcnn/output/predictions/ --name eval --epochs 0
-
+cd /workspace
+python tools/train_net_ocrtoc.py --config-file configs/ocrtoc/voxmesh_R50_depth.yaml OUTPUT_DIR output_meshvoxdepth_gtdepth
 ```
-
-[paper]: https://arxiv.org/abs/2010.08682
