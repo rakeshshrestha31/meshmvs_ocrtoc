@@ -81,7 +81,7 @@ class MeshVoxMultiViewDataset(MeshVoxDataset):
                 self.data_dir, scene_name, RT
             )
 
-        if self.voxel_size > 0:
+        if False: # self.voxel_size > 0:
             voxels = []
             for idx, iid in enumerate(image_ids):
                 voxels.append(self.read_voxels(
