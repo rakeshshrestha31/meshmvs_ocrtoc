@@ -2,6 +2,7 @@
 ```
 cd <download_dir>
 unzip meshmvs_ocrtoc_dataset.zip
+mkdir -p <repo_dir>/datasets/ocrtoc/
 mv meshmvs_ocrtoc_dataset <repo_dir>/datasets/ocrtoc/3d_dataset
 unzip output_meshvoxdepth_gtdepth.zip
 mv output_meshvoxdepth_gtdepth <repo_dir>/
