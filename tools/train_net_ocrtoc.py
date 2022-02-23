@@ -523,7 +523,7 @@ def eval_and_save(
     if comm.is_main_process():
         logger.info("Evaluating on training set:")
         train_metrics, train_preds = evaluate_split(
-            model, loaders["train_eval"], prefix="train_", max_predictions=1000
+            model, loaders["train_eval"], prefix="train_", max_predictions=70 # 1000
         )
         eval_split = "val"
         if eval_split not in loaders:
@@ -531,7 +531,7 @@ def eval_and_save(
             eval_split = "test"
         logger.info("Evaluating on %s set:" % eval_split)
         test_metrics, test_preds = evaluate_split(
-            model, loaders[eval_split], prefix="%s_" % eval_split, max_predictions=1000
+            model, loaders[eval_split], prefix="%s_" % eval_split, max_predictions=70 # 1000
         )
         str_out = "Results on train: "
         for k, v in train_metrics.items():
