@@ -14,6 +14,7 @@ from pytorch3d.ops import sample_points_from_meshes
 
 from meshrcnn.utils.metrics import \
     compare_meshes, compare_meshes_p2m, compare_voxel_scores
+from meshrcnn.utils.metrics import _sample_meshes, _compute_sampling_metrics
 
 import shapenet.utils.vis as vis_utils
 from shapenet.data.utils import image_to_numpy, imagenet_deprocess
@@ -259,7 +260,7 @@ def evaluate_split(
     predictions = defaultdict(list)
     metrics = defaultdict(list)
     deprocess = imagenet_deprocess(rescale_image=False)
-    for batch_idx, batch in enumerate(loader):
+    for batch_idx, batch in tqdm.tqdm(enumerate(loader), total=len(loader)):
         batch = loader.postprocess(batch, device)
         model_kwargs = {}
         module = model.module if hasattr(model, "module") else model
@@ -278,12 +279,32 @@ def evaluate_split(
         )
 
         # Only compute metrics for the final predicted meshes, not intermediates
-        if len(meshes_pred):
-            cur_metrics = compare_meshes(meshes_pred[-1], batch["meshes"])
-            if cur_metrics is None:
-                continue
-            for k, v in cur_metrics.items():
-                metrics[k].append(v)
+        # if len(meshes_pred):
+        #     cur_metrics = compare_meshes(meshes_pred[-1], batch["meshes"])
+        #     if cur_metrics is None:
+        #         continue
+        #     for k, v in cur_metrics.items():
+        #         metrics[k].append(v)
+
+        pred_points, pred_normals = _sample_meshes(meshes_pred[-1], 10000)
+
+        min_gt, _ = batch["points"].min(dim=1)
+        max_gt, _ = batch["points"].max(dim=1)
+        bbox = torch.stack((min_gt, max_gt), dim=-1) # (N, 3, 2)
+        long_edge = (bbox[:, :, 1] - bbox[:, :, 0]).max(dim=1)[0]  # (N,)
+        target = 10.0
+        scale = target / long_edge
+
+        cur_metrics = _compute_sampling_metrics(
+            pred_points * scale, pred_normals,
+            batch["points"] * scale, batch["normals"],
+            thresholds=[0.1, 0.2, 0.3, 0.4, 0.5], eps=1e-8
+        )
+
+        if cur_metrics is None:
+            continue
+        for k, v in cur_metrics.items():
+            metrics[k].append(v)
 
         if "voxels" in batch:
             voxel_losses = MeshLoss.voxel_loss(
@@ -310,7 +331,9 @@ def evaluate_split(
                     predictions[verts_key].append(verts.cpu().numpy())
                     predictions[faces_key].append(faces.cpu().numpy())
 
-        num_predictions += len(batch["meshes"])
+        # num_predictions += len(batch["meshes"])
+        num_predictions += batch["imgs"].shape[0]
+
         # logger.info("Evaluated %d predictions so far" % num_predictions)
         if 0 < max_predictions <= num_predictions:
             break

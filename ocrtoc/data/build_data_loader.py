@@ -26,12 +26,12 @@ def build_data_loader(
     return_mesh, sample_online, return_id_str = False, False, False
     if split_name in ["train_eval", "val"]:
         batch_size = cfg.SOLVER.BATCH_SIZE_EVAL
-        return_mesh = True
-        sample_online = True
+        # return_mesh = True
+        # sample_online = True
         return_id_str = True
     elif split_name == "test":
         batch_size = cfg.SOLVER.BATCH_SIZE_EVAL
-        return_mesh = True
+        # return_mesh = True
         return_id_str = True
 
     splits_file = cfg.DATASETS.SPLITS_FILE
