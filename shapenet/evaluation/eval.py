@@ -304,6 +304,8 @@ def evaluate_split(
         if cur_metrics is None:
             continue
         for k, v in cur_metrics.items():
+            if isinstance(v, torch.Tensor):
+                v = v.item()
             metrics[k].append(v)
 
         if "voxels" in batch:
