@@ -50,8 +50,24 @@ class MeshVoxMultiViewDataset(MeshVoxDataset):
 
         self.transform = self.get_transform(normalize_images)
 
+        self.category_dict, self.scene_category_dict = self.get_category_dict(data_dir)
+
+    @staticmethod
+    def get_category_dict(dataset_root):
+        categories_file = os.path.join(dataset_root,  'categories.json')
+        with open(categories_file, 'r') as f:
+            category_dict = json.load(f)
+
+        scene_category_dict = {}
+        for category, scenes in category_dict.items():
+            for scene in scenes:
+                scene_category_dict[scene] = category
+
+        return category_dict, scene_category_dict
+
     def __getitem__(self, idx):
         scene_name = self.scene_names[idx]
+        scene_category = self.scene_category_dict[scene_name]
         image_ids = self.image_ids[idx]
 
         metadata = self.read_camera_parameters(self.data_dir, scene_name)
@@ -93,7 +109,9 @@ class MeshVoxMultiViewDataset(MeshVoxDataset):
 
         P = K.mm(RT)
 
-        id_str = "%s-%s" % (scene_name, '_'.join([str(i) for i in image_ids]))
+        id_str = "%s-%s-%s" % (
+            scene_name, scene_category, '_'.join([str(i) for i in image_ids])
+        )
         return {
             "imgs": imgs, "verts": verts, "faces": faces, "points": points,
             "normals": normals, "Ps": P, "id_str": id_str,

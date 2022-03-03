@@ -243,6 +243,104 @@ def show_instance_stats(scores, num_instances, class_names):
 
 
 @torch.no_grad()
+def evaluate_test_ocrtoc(model, data_loader, vis_preds=False):
+    """
+    This function evaluates the model on the dataset defined by data_loader.
+    The metrics reported are described in Table 2 of our paper.
+    """
+    # Note that all eval runs on main process
+    assert comm.is_main_process()
+    deprocess = imagenet_deprocess(rescale_image=False)
+    device = torch.device("cuda:0")
+    # evaluation
+    class_names = {i: i for i in data_loader.dataset.category_dict.keys()}
+
+    num_instances = {i: 0 for i in class_names}
+    chamfer = {i: 0 for i in class_names}
+    normal = {i: 0 for i in class_names}
+    f1_01 = {i: 0 for i in class_names}
+    f1_02 = {i: 0 for i in class_names}
+    f1_03 = {i: 0 for i in class_names}
+    f1_04 = {i: 0 for i in class_names}
+    f1_05 = {i: 0 for i in class_names}
+
+    num_batch_evaluated = 0
+    for batch_idx, batch in tqdm.tqdm(enumerate(data_loader), total=len(data_loader)):
+        batch = data_loader.postprocess(batch, device)
+        sids = [id_str.split("-")[1] for id_str in batch["id_strs"]]
+        for sid in sids:
+            num_instances[sid] += 1
+
+        with inference_context(model):
+            model_kwargs = {}
+            module = model.module if hasattr(model, "module") else model
+            if isinstance(module, VoxMeshMultiViewHead):
+                model_kwargs["intrinsics"] = batch["intrinsics"]
+                model_kwargs["extrinsics"] = batch["extrinsics"]
+            if isinstance(module, VoxMeshDepthHead):
+                model_kwargs["masks"] = batch["masks"]
+                if module.cfg.MODEL.USE_GT_DEPTH or module.mvsnet is None:
+                    model_kwargs["depths"] = batch["depths"]
+
+            model_outputs = model(batch["imgs"], **model_kwargs)
+            voxel_scores = model_outputs["voxel_scores"]
+            meshes_pred = model_outputs.get("meshes_pred", [])
+
+            if len(meshes_pred):
+                # cur_metrics = compare_meshes(meshes_pred[-1], batch["meshes"], reduce=False)
+                cur_metrics = compare_points(batch, meshes_pred[-1])
+                cur_metrics["verts_per_mesh"] = meshes_pred[-1].num_verts_per_mesh().cpu()
+                cur_metrics["faces_per_mesh"] = meshes_pred[-1].num_faces_per_mesh().cpu()
+
+                for i, sid in enumerate(sids):
+                    chamfer[sid] += cur_metrics["Chamfer-L2"][i].item()
+                    normal[sid] += cur_metrics["AbsNormalConsistency"][i].item()
+                    f1_01[sid] += cur_metrics["F1@%f" % 0.1][i].item()
+                    f1_02[sid] += cur_metrics["F1@%f" % 0.2][i].item()
+                    f1_03[sid] += cur_metrics["F1@%f" % 0.3][i].item()
+                    f1_04[sid] += cur_metrics["F1@%f" % 0.4][i].item()
+                    f1_05[sid] += cur_metrics["F1@%f" % 0.5][i].item()
+
+                    if vis_preds:
+                        img = image_to_numpy(deprocess(batch["imgs"][i]))
+                        vis_utils.visualize_prediction(
+                            batch["id_strs"][i], img, meshes_pred[-1][i], "/tmp/output"
+                        )
+
+            num_batch_evaluated += 1
+            # logger.info("Evaluated %d / %d batches" % (num_batch_evaluated, len(data_loader)))
+
+    vis_utils.print_instances_class_histogram(
+        num_instances,
+        class_names,
+        {
+            "chamfer": chamfer, "normal": normal,
+            "f1_01": f1_01, "f1_02": f1_02, "f1_03": f1_03, "f1_04": f1_04, "f1_05": f1_05
+        },
+    )
+
+
+@torch.no_grad()
+def compare_points(batch, meshes_pred):
+    pred_points, pred_normals = _sample_meshes(meshes_pred, 10000)
+
+    min_gt, _ = batch["points"].min(dim=1)
+    max_gt, _ = batch["points"].max(dim=1)
+    bbox = torch.stack((min_gt, max_gt), dim=-1) # (N, 3, 2)
+    long_edge = (bbox[:, :, 1] - bbox[:, :, 0]).max(dim=1)[0]  # (N,)
+    target = 10.0
+    scale = target / long_edge
+
+    cur_metrics = _compute_sampling_metrics(
+        pred_points * scale, pred_normals,
+        batch["points"] * scale, batch["normals"],
+        thresholds=[0.1, 0.2, 0.3, 0.4, 0.5], eps=1e-8
+    )
+
+    return cur_metrics
+
+
+@torch.no_grad()
 def evaluate_split(
     model, loader, max_predictions=-1, num_predictions_keep=10, prefix="", store_predictions=False
 ):
@@ -286,20 +384,7 @@ def evaluate_split(
         #     for k, v in cur_metrics.items():
         #         metrics[k].append(v)
 
-        pred_points, pred_normals = _sample_meshes(meshes_pred[-1], 10000)
-
-        min_gt, _ = batch["points"].min(dim=1)
-        max_gt, _ = batch["points"].max(dim=1)
-        bbox = torch.stack((min_gt, max_gt), dim=-1) # (N, 3, 2)
-        long_edge = (bbox[:, :, 1] - bbox[:, :, 0]).max(dim=1)[0]  # (N,)
-        target = 10.0
-        scale = target / long_edge
-
-        cur_metrics = _compute_sampling_metrics(
-            pred_points * scale, pred_normals,
-            batch["points"] * scale, batch["normals"],
-            thresholds=[0.1, 0.2, 0.3, 0.4, 0.5], eps=1e-8
-        )
+        cur_metrics = compare_points(batch, meshes_pred[-1])
 
         if cur_metrics is None:
             continue

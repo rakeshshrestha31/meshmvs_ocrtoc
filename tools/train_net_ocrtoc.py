@@ -26,7 +26,7 @@ from pytorch3d.transforms import Transform3d
 from ocrtoc.config import get_ocrtoc_cfg
 from ocrtoc.data import build_data_loader, register_ocrtoc
 from shapenet.evaluation import \
-        evaluate_split, evaluate_test, evaluate_test_p2m, evaluate_vox
+        evaluate_split, evaluate_test, evaluate_test_ocrtoc, evaluate_vox
 from shapenet.utils.coords import relative_extrinsics, \
         get_blender_intrinsic_matrix
 
@@ -64,7 +64,7 @@ def main_worker_eval(worker_id, args):
 
     # build test set
     test_loader = build_data_loader(
-        cfg, get_dataset_name(cfg), "val", multigpu=False
+        cfg, get_dataset_name(cfg), "test", multigpu=False
     )
     logger.info("test - %d" % len(test_loader))
 
@@ -95,11 +95,11 @@ def main_worker_eval(worker_id, args):
     # disable_running_stats(model)
 
     val_loader = build_data_loader(
-        cfg, get_dataset_name(cfg), "train_eval", multigpu=False
+        cfg, get_dataset_name(cfg), "val", multigpu=False
     )
     logger.info("val - %d" % len(val_loader))
     test_metrics, test_preds = evaluate_split(
-        model, val_loader, prefix="val_", max_predictions=20 # 100
+        model, val_loader, prefix="val_", max_predictions=150
     )
     str_out = "Results on test"
     for k, v in test_metrics.items():
@@ -118,13 +118,7 @@ def main_worker_eval(worker_id, args):
             str_out += "%s %.4f " % (k, v)
         logger.info(str_out)
     else:
-        test_metrics, test_preds = evaluate_split(
-            model, test_loader, prefix="test_", max_predictions=-1
-        )
-        str_out = "Results on test: "
-        for k, v in test_metrics.items():
-            str_out += "%s %.4f " % (k, v)
-        logger.info(str_out)
+        evaluate_test_ocrtoc(model, test_loader, vis_preds=False)
     # elif args.eval_p2m:
     #     logger.info("running eval_p2m")
     #     test_metrics = evaluate_test_p2m(model, test_loader)
@@ -513,7 +507,7 @@ def training_loop(cfg, cp, model, optimizer, scheduler, loaders, device, loss_fn
         test_loader = build_data_loader(
             cfg, get_dataset_name(cfg), "test", multigpu=False
         )
-        evaluate_test_p2m(model, test_loader)
+        evaluate_test_ocrtoc(model, test_loader)
 
 
 def eval_and_save(

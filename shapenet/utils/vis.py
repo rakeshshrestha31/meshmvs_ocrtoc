@@ -19,7 +19,7 @@ def print_instances_class_histogram(num_instances, class_names, results):
         num_instances (list): list of dataset dicts.
     """
     num_classes = len(class_names)
-    N_COLS = 7
+    N_COLS = 9
     data = list(
         itertools.chain(
             *[
@@ -29,19 +29,23 @@ def print_instances_class_histogram(num_instances, class_names, results):
                     results["chamfer"][id] / v,
                     results["normal"][id] / v,
                     results["f1_01"][id] / v,
+                    results["f1_02"][id] / v,
                     results["f1_03"][id] / v,
+                    results["f1_04"][id] / v,
                     results["f1_05"][id] / v,
                 ]
                 for id, v in num_instances.items()
             ]
         )
     )
-    total_num_instances = sum(data[1::7])
-    mean_chamfer = sum(data[2::7]) / num_classes
-    mean_normal = sum(data[3::7]) / num_classes
-    mean_f1_01 = sum(data[4::7]) / num_classes
-    mean_f1_03 = sum(data[5::7]) / num_classes
-    mean_f1_05 = sum(data[6::7]) / num_classes
+    total_num_instances = sum(data[1::N_COLS])
+    mean_chamfer    = sum(data[2::N_COLS]) / num_classes
+    mean_normal     = sum(data[3::N_COLS]) / num_classes
+    mean_f1_01      = sum(data[4::N_COLS]) / num_classes
+    mean_f1_02      = sum(data[5::N_COLS]) / num_classes
+    mean_f1_03      = sum(data[6::N_COLS]) / num_classes
+    mean_f1_04      = sum(data[7::N_COLS]) / num_classes
+    mean_f1_05      = sum(data[8::N_COLS]) / num_classes
     data.extend([None] * (N_COLS - (len(data) % N_COLS)))
     data.extend(
         [
@@ -50,7 +54,9 @@ def print_instances_class_histogram(num_instances, class_names, results):
             mean_chamfer,
             mean_normal,
             mean_f1_01,
+            mean_f1_02,
             mean_f1_03,
+            mean_f1_04,
             mean_f1_05,
         ]
     )
@@ -62,14 +68,19 @@ def print_instances_class_histogram(num_instances, class_names, results):
             sum(results["chamfer"].values()) / total_num_instances,
             sum(results["normal"].values()) / total_num_instances,
             sum(results["f1_01"].values()) / total_num_instances,
+            sum(results["f1_02"].values()) / total_num_instances,
             sum(results["f1_03"].values()) / total_num_instances,
+            sum(results["f1_04"].values()) / total_num_instances,
             sum(results["f1_05"].values()) / total_num_instances,
         ]
     )
     data = itertools.zip_longest(*[data[i::N_COLS] for i in range(N_COLS)])
     table = tabulate(
         data,
-        headers=["category", "#instances", "chamfer", "normal", "F1(0.1)", "F1(0.3)", "F1(0.5)"]
+        headers=[
+            "category", "#instances", "chamfer", "normal",
+            "F1(0.1)", "F1(0.2)", "F1(0.3)", "F1(0.4)", "F1(0.5)"
+        ]
         * (N_COLS // 2),
         tablefmt="pipe",
         numalign="left",
