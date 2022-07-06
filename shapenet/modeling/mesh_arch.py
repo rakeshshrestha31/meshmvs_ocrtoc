@@ -1309,11 +1309,12 @@ class MeshDepthHead(VoxMeshDepthHead):
             vox_scores,
             self.voxel_size, self.cubify_threshold
         )
+        num_cubified_verts = cubified_meshes.verts_padded().shape[1]
 
         if self.cfg.MODEL.VOXEL_REFINE_HEAD.VOXEL_ONLY:
             # the mesh head is missing
             mesh_head_output = {}
-        elif voxel_only:
+        elif voxel_only or num_cubified_verts > 7500:
             dummy_meshes = dummy_mesh(batch_size, device)
             mesh_head_output = self.forward_mesh_head(
                 imgs, masked_depths,
