@@ -642,7 +642,7 @@ def debug_batch(batch, model, model_kwargs, loader=None):
 
         if (batch.get("id_strs", None) is not None) and (loader is not None):
             id_str = batch["id_strs"][batch_idx]
-            scene_name, view_ids = id_str.split("-")
+            scene_name, category, view_ids = id_str.split("-")
             view_ids = [int(i) for i in view_ids.split("_")]
             print(id_str, scene_name, view_ids)
 
